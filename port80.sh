@@ -3,7 +3,7 @@
 # Enhanced with modular functions, advanced fuzzing, header checks, injection scans,
 # screenshotting, TLS-on-80 detection, and OWASP ZAP baseline scan.
 
-set -euo pipefail
+set -uo pipefail  # Do not exit on errors; allow script to continue
 
 #### Configuration & Helpers ####
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -111,20 +111,28 @@ run_zap() {
 }
 
 #### Main Execution ####
-run_nmap
-run_http_checks
-run_whatweb
-run_wafw00f
-run_gobuster
-run_ffuf
-run_nikto
-run_nuclei
-run_sqlmap
-run_xsstrike
-run_screenshots
-run_tls_detect
-run_zap
+tools=( \
+  run_nmap 
+  run_http_checks 
+  run_whatweb 
+  run_wafw00f 
+  run_gobuster 
+  run_ffuf 
+  run_nikto 
+  run_nuclei 
+  run_sqlmap 
+  run_xsstrike 
+  run_screenshots 
+  run_tls_detect 
+  run_zap 
+)
+
+for tool in "${tools[@]}"; do
+  echo -e "\n--- Executing ${tool} ---"
+  if ! $tool; then
+    echo "[!] ${tool} encountered an error, skipping to next."
+  fi
+done
 
 echo -e "\n[✔] port80 audit complete. See results in ./${OUTDIR}/"
 describe_results
-
